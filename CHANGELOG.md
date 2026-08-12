@@ -7,6 +7,22 @@ Because the emission table in the README *is* the contract, a change to any row
 in it — what gets emitted for a given half-arrived token — is a breaking change,
 even though no type signature moves.
 
+## [0.1.2] — 2026-08-12
+
+No changes to the library. `src/` is byte-for-byte identical to 0.1.1; this
+release exists to refresh the README that ships in the package and to exercise
+the automated release path end to end.
+
+### Changed
+
+- Releasing is now a version bump. Changing `version` in `package.json` and
+  pushing to `main` publishes to npm and creates the tag and GitHub Release,
+  with notes taken from this file. Re-running a release is a no-op rather than
+  a failure.
+- The mutation job runs in about four minutes instead of twenty-six, by scaling
+  down fast-check iterations under Stryker only. The score is unchanged —
+  identical mutants killed and survived.
+
 ## [0.1.1] — 2026-08-12
 
 ### Added
