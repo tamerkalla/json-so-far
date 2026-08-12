@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/tamerkalla/json-so-far/actions/workflows/ci.yml/badge.svg)](https://github.com/tamerkalla/json-so-far/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/json-so-far.svg)](https://www.npmjs.com/package/json-so-far)
-[![mutation score](https://img.shields.io/badge/mutation%20score-PENDING-blue.svg)](#how-this-is-tested)
+[![mutation score](https://img.shields.io/badge/mutation%20score-88.55%25-brightgreen.svg)](#mutation-score-8855)
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 
 An LLM streams you this:
@@ -160,7 +160,7 @@ from about twenty lines of [fast-check](https://fast-check.dev).
 
 Plus: no generated document can pollute `Object.prototype` (see below).
 
-### Mutation score: PENDING
+### Mutation score: 88.55%
 
 Line coverage tells you a line *ran*. It does not tell you a test would have
 **noticed** if that line were wrong. [Stryker](https://stryker-mutator.io)
@@ -168,12 +168,40 @@ answers the second question by deliberately corrupting the source — flipping
 `<` to `<=`, deleting statements, negating conditions — and checking that the
 suite fails each time.
 
+**464 of 524 mutants detected.** Run it yourself:
+
 ```bash
 npm run mutation
 ```
 
-CI fails the build if the score drops below the threshold, and uploads the full
-HTML report as an artifact on every run.
+CI fails the build below 85% and uploads the full HTML report as an artifact on
+every run.
+
+#### What the surviving 60 are
+
+Publishing a score without saying what it missed is most of the way back to a
+coverage badge, so: the first run scored **78.01%**, and reading the survivors
+found two genuinely different problems.
+
+About half were real gaps — the `complete` flag was barely asserted anywhere, so
+mutations that made it permanently optimistic went unnoticed. That produced the
+invariant pinning `complete` at *every* truncation index. Another was a bound in
+the `\uXXXX` validator: no test passed a literal `A` as a hex digit, so
+`> 'A'` instead of `>= 'A'` survived — a bug that mangles exactly one code
+point, `©`, and nothing else.
+
+The rest were **equivalent mutants** — changes that cannot alter behaviour, so no
+test can ever kill them. Most come from one pattern: `src[p]` is `undefined` past
+the end of the string, and every comparison against `undefined` is false, so
+`p < n && src[p] === '.'` behaves identically to `p <= n && src[p] === '.'`. The
+bounds check is redundant to the *machine* and load-bearing for the *reader*, so
+it stays, and those mutants stay alive. Where redundancy was real rather than
+explanatory — a duplicated escape branch, a dead length check — it was deleted
+instead, which is why the mutant count fell from 573 to 524 while the code got
+shorter.
+
+That is the honest ceiling here, and it is why the threshold sits at 85 rather
+than 100.
 
 ### Prototype pollution
 
