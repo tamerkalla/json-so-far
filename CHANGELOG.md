@@ -7,7 +7,7 @@ Because the emission table in the README *is* the contract, a change to any row
 in it — what gets emitted for a given half-arrived token — is a breaking change,
 even though no type signature moves.
 
-## [0.1.0] — Unreleased
+## [0.1.0] — 2026-08-12
 
 Initial release.
 
