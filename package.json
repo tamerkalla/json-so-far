@@ -1,0 +1,72 @@
+{
+  "name": "json-so-far",
+  "version": "0.1.0",
+  "description": "Best-effort parser for JSON that hasn't finished arriving. Render streaming LLM output before the closing brace shows up. Zero dependencies, never throws.",
+  "keywords": [
+    "json",
+    "partial",
+    "partial-json",
+    "streaming",
+    "incomplete",
+    "truncated",
+    "parser",
+    "repair",
+    "json-repair",
+    "llm",
+    "ai",
+    "structured-output",
+    "openai",
+    "anthropic",
+    "stream"
+  ],
+  "license": "MIT",
+  "author": "Tamer Kalla (https://github.com/tamerkalla)",
+  "homepage": "https://github.com/tamerkalla/Json-parser#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tamerkalla/Json-parser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tamerkalla/Json-parser/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "mutation": "stryker run",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/vitest-runner": "^8.7.1",
+    "@vitest/coverage-v8": "^2.1.9",
+    "fast-check": "^3.23.2",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
