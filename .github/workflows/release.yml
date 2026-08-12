@@ -18,8 +18,17 @@ name: Release
 # Renaming this file, the repo, or the owner breaks publishing until that
 # config is updated to match.
 
+# Releasing is a version bump. Change `version` in package.json, push to main,
+# and this publishes to npm and creates the matching tag and GitHub Release on
+# its own. Pushes that do not change the version cost about a minute and skip
+# the publish, because the check is "is this version on npm yet", not "did this
+# commit touch package.json".
+#
+# The `v*` tag trigger is kept so a hand-cut tag still works.
+
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -31,7 +40,7 @@ jobs:
     name: publish to npm
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # to create the tag and GitHub Release
       id-token: write # required for npm provenance
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +92,7 @@ jobs:
         run: |
           NAME="$(node -p "require('./package.json').name")"
           VERSION="$(node -p "require('./package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           CODE="$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$NAME/$VERSION")"
           if [ "$CODE" = "200" ]; then
             echo "already=true" >> "$GITHUB_OUTPUT"
@@ -102,3 +112,36 @@ jobs:
       - name: Publish
         if: steps.published.outputs.already == 'false'
         run: npm publish --provenance --access public
+
+      # Only after a successful publish, so the tag never points at something
+      # that failed to ship. Skipped when the run was itself started by a tag,
+      # which would already have created it.
+      #
+      # `gh release create` makes the tag and the Release together. Using
+      # GITHUB_TOKEN is deliberate: releases it creates do not trigger further
+      # workflow runs, so this cannot re-enter the workflow.
+      - name: Tag and create the GitHub Release
+        if: >-
+          steps.published.outputs.already == 'false' &&
+          !startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.published.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists."
+            exit 0
+          fi
+          NOTES="$(awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { grabbing = 1; next }
+            grabbing && /^## \[/     { exit }
+            grabbing                 { print }
+          ' CHANGELOG.md)"
+          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            NOTES="See CHANGELOG.md."
+          fi
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --notes "$NOTES"
+          echo "Created release v$VERSION." >> "$GITHUB_STEP_SUMMARY"

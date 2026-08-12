@@ -242,8 +242,11 @@ That constraint shaped the design more than it might seem:
   the cases you would not have thought of.
 - **Mutation score as the quality gate.** A number that is hard to fool, checked
   by a machine, readable at a glance.
-- **Releasing is a button.** Push a tag; the workflow builds, tests, and
-  publishes to npm with provenance.
+- **Releasing is a version bump.** Change `version` in `package.json`, push to
+  `main`, and CI publishes to npm and cuts the tag and GitHub Release itself.
+  No tag ceremony, no release page to fill in, no credential: publishing
+  authenticates with [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers),
+  so there is no token stored in the repository at all.
 
 ---
 
