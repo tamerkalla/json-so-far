@@ -40,22 +40,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify the built package is importable
-        run: |
-          node -e "
-            const { parsePartial } = require('./dist/index.cjs');
-            const got = JSON.stringify(parsePartial('{\"a\": [1, 2], \"b\": \"hel'));
-            if (got !== '{\"a\":[1],\"b\":\"hel\"}') {
-              throw new Error('CJS smoke test returned ' + got);
-            }
-          "
-          node --input-type=module -e "
-            import { parsePartial } from './dist/index.js';
-            const got = JSON.stringify(parsePartial('{\"a\": [1, 2], \"b\": \"hel'));
-            if (got !== '{\"a\":[1],\"b\":\"hel\"}') {
-              throw new Error('ESM smoke test returned ' + got);
-            }
-          "
+      # Exercises the built artifacts, which the unit tests never touch —
+      # they run against src/.
+      - name: Verify both published entry points load and behave
+        run: node scripts/smoke.mjs
 
   mutation:
     name: mutation score
