@@ -1,6 +1,6 @@
 {
   "name": "json-so-far",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Best-effort parser for JSON that hasn't finished arriving. Render streaming LLM output before the closing brace shows up. Zero dependencies, never throws.",
   "keywords": [
     "json",
@@ -38,7 +38,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"

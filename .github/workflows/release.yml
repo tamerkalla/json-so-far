@@ -1,16 +1,22 @@
 name: Release
 
-# Publishing is a button, not a terminal session: push a tag (or use the
-# "Run workflow" button on this workflow), and npm gets the package.
+# Publishing is a button, not a terminal session: cut a GitHub Release with a
+# `v*` tag, and npm gets the package.
 #
-#   git tag v0.1.0 && git push origin v0.1.0
+# Authentication is npm Trusted Publishing (OIDC). There is no token here and
+# no NPM_TOKEN secret: GitHub mints a short-lived credential for this specific
+# workflow run, and npm accepts it because the package's trusted-publisher
+# settings name this repository and this workflow file. Nothing long-lived
+# exists to leak, expire, or rotate.
 #
-# One-time setup, both doable from a phone browser:
-#   1. Create an npm automation token, then add it as the repository secret
-#      NPM_TOKEN under Settings → Secrets and variables → Actions.
-#   2. Nothing else. Provenance is signed with the workflow's OIDC identity,
-#      which is why `id-token: write` is requested below — it publishes a
-#      verifiable link from the tarball on npm back to this exact commit.
+# The trust relationship lives on npm, at
+# npmjs.com/package/json-so-far → Settings → Trusted Publisher:
+#   organization/user: tamerkalla
+#   repository:        json-so-far
+#   workflow:          release.yml
+#
+# Renaming this file, the repo, or the owner breaks publishing until that
+# config is updated to match.
 
 on:
   push:
@@ -36,6 +42,14 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           cache: npm
 
+      # Node 22 ships npm 10.x; Trusted Publishing needs 11.5.1+. Without this
+      # the publish step fails with an authentication error rather than
+      # anything that points at the npm version.
+      - name: Upgrade npm for Trusted Publishing support
+        run: |
+          npm install -g npm@latest
+          npm --version
+
       - run: npm ci
 
       # Never ship a red build.
@@ -59,7 +73,8 @@ jobs:
             exit 1
           fi
 
+      # No NODE_AUTH_TOKEN: the OIDC identity granted by `id-token: write`
+      # above is the credential. Provenance is signed with that same identity,
+      # publishing a verifiable link from the tarball on npm back to this commit.
       - name: Publish
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

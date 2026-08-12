@@ -7,6 +7,20 @@ Because the emission table in the README *is* the contract, a change to any row
 in it — what gets emitted for a given half-arrived token — is a breaking change,
 even though no type signature moves.
 
+## [0.1.1] — 2026-08-12
+
+### Added
+
+- `package.json` is now reachable through the `exports` map. Tooling that
+  reads `json-so-far/package.json` for version detection previously hit
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+
+### Changed
+
+- Releases now authenticate with npm Trusted Publishing (OIDC) instead of a
+  long-lived automation token. No publishing credential is stored in the
+  repository.
+
 ## [0.1.0] — 2026-08-12
 
 Initial release.
