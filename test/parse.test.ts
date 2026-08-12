@@ -294,6 +294,16 @@ describe('streaming: false (salvage a truncated final buffer)', () => {
 });
 
 describe('unicode escape validation', () => {
+  it('accepts the first and last character of every hex range', () => {
+    // `0`,`9`,`a`,`f`,`A`,`F` are the exact endpoints of the three valid
+    // ranges. An off-by-one at an endpoint rejects a single real code point —
+    // a bound of `> 'A'` instead of `>= 'A'` breaks `©` and nothing else,
+    // which is exactly the bug no hand-picked example catches.
+    expect(parsePartial('["\\u0A0F\\u9a9f\\u00A9"]')).toEqual([
+      'ਏ骟©',
+    ]);
+  });
+
   it('accepts every hex class', () => {
     expect(parsePartial('["\\u0039\\u002f\\u00FF\\u00ab\\u00CD"]')).toEqual([
       '\u0039\u002f\u00FF\u00ab\u00CD',
