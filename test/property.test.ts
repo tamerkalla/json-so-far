@@ -12,6 +12,23 @@ import { parsePartial, parsePartialResult } from '../src/index.js';
  */
 
 /**
+ * Property-test iteration counts, scaled by `FC_RUNS_SCALE`.
+ *
+ * At full strength (the default, and what CI's `test` job runs) these numbers
+ * are deliberately generous. Under mutation testing they are not affordable:
+ * Stryker re-runs the covering tests once per mutant, so a suite that takes two
+ * seconds becomes half an hour across 524 mutants.
+ *
+ * Scaling down costs less than it looks like. Mutation testing asks whether a
+ * test *fails*, not how many random cases it tried, and each fast-check case
+ * here already sweeps every truncation index of a whole document — so one case
+ * is dozens of assertions. The floor keeps any property from degenerating into
+ * a handful of samples.
+ */
+const RUNS_SCALE = Number(process.env.FC_RUNS_SCALE ?? '1');
+const runs = (full: number): number => Math.max(10, Math.round(full * RUNS_SCALE));
+
+/**
  * Object keys are prefixed so they can never look like array indices.
  *
  * This is not tidiness: JS reorders integer-like keys, so `JSON.parse('{"2":1,
@@ -109,7 +126,7 @@ describe('invariant 1 — never throws', () => {
         }
         return true;
       }),
-      { numRuns: 250 },
+      { numRuns: runs(250) },
     );
   });
 
@@ -121,7 +138,7 @@ describe('invariant 1 — never throws', () => {
         }
         return true;
       }),
-      { numRuns: 2000 },
+      { numRuns: runs(2000) },
     );
   });
 
@@ -131,7 +148,7 @@ describe('invariant 1 — never throws', () => {
         parsePartial(text.slice(0, cut % (text.length + 1)));
         return true;
       }),
-      { numRuns: 2000 },
+      { numRuns: runs(2000) },
     );
   });
 
@@ -154,7 +171,7 @@ describe('invariant 2 — output is always a truthful prefix', () => {
         }
         return true;
       }),
-      { numRuns: 300 },
+      { numRuns: runs(300) },
     );
   });
 
@@ -169,7 +186,7 @@ describe('invariant 2 — output is always a truthful prefix', () => {
         }
         return true;
       }),
-      { numRuns: 250 },
+      { numRuns: runs(250) },
     );
   });
 });
@@ -182,7 +199,7 @@ describe('invariant 3 — the last index reproduces JSON.parse exactly', () => {
         expect(parsePartial(text, { streaming: false })).toEqual(JSON.parse(text));
         return true;
       }),
-      { numRuns: 500 },
+      { numRuns: runs(500) },
     );
   });
 
@@ -203,7 +220,7 @@ describe('invariant 3 — the last index reproduces JSON.parse exactly', () => {
           return true;
         },
       ),
-      { numRuns: 500 },
+      { numRuns: runs(500) },
     );
   });
 });
@@ -227,7 +244,7 @@ describe('invariant 3b — `complete` is exact, never merely optimistic', () => 
           return parsePartialResult(text).complete;
         },
       ),
-      { numRuns: 400 },
+      { numRuns: runs(400) },
     );
   });
 
@@ -244,7 +261,7 @@ describe('invariant 3b — `complete` is exact, never merely optimistic', () => 
           return parsePartialResult(text, options).complete;
         },
       ),
-      { numRuns: 300 },
+      { numRuns: runs(300) },
     );
   });
 });
@@ -263,7 +280,7 @@ describe('invariant 4 — output only ever grows', () => {
         }
         return true;
       }),
-      { numRuns: 300 },
+      { numRuns: runs(300) },
     );
   });
 });
@@ -282,7 +299,7 @@ describe('invariant 5 — chunk boundaries are irrelevant', () => {
         expect(last).toEqual(parsePartial(text));
         return true;
       }),
-      { numRuns: 300 },
+      { numRuns: runs(300) },
     );
   });
 });
@@ -309,7 +326,7 @@ describe('prototype safety, generatively', () => {
           );
         },
       ),
-      { numRuns: 300 },
+      { numRuns: runs(300) },
     );
   });
 });

@@ -177,6 +177,14 @@ npm run mutation
 CI fails the build below 85% and uploads the full HTML report as an artifact on
 every run.
 
+The mutation run uses fewer fast-check iterations than the normal test job
+(`FC_RUNS_SCALE`), because Stryker re-runs the covering tests once per mutant
+and full strength turned a four-minute job into half an hour. This costs
+nothing measurable: the scaled run kills *exactly* the same mutants — 450
+killed, 14 timed out, 60 survived, byte for byte the same score. Mutation
+testing asks whether a test fails, not how many random cases it tried, and each
+case here already sweeps every truncation index of an entire document.
+
 #### What the surviving 60 are
 
 Publishing a score without saying what it missed is most of the way back to a
