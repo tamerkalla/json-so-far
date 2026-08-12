@@ -10,31 +10,52 @@
  */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { parsePartial as parsePartialEsm } from '../dist/index.js';
+import * as esm from '../dist/index.js';
 
 const require = createRequire(import.meta.url);
-const { parsePartial: parsePartialCjs } = require('../dist/index.cjs');
+const cjs = require('../dist/index.cjs');
 
 // `[1, 2]` is closed by its own `]`, so both elements are final. `"hel` is
-// still open, so it comes back as the prefix received so far.
+// still open, so it comes back as the prefix received so far — and is the one
+// path that has not settled.
 const INPUT = '{"a": [1, 2], "b": "hel';
-const EXPECTED = '{"a":[1,2],"b":"hel"}';
+const EXPECTED_VALUE = '{"a":[1,2],"b":"hel"}';
+const EXPECTED_SETTLED = '["/a","/a/0","/a/1"]';
 
 let failed = false;
-for (const [label, parsePartial] of [
-  ['ESM', parsePartialEsm],
-  ['CJS', parsePartialCjs],
-]) {
-  const actual = JSON.stringify(parsePartial(INPUT));
+
+function check(label, what, actual, expected) {
   try {
-    assert.equal(actual, EXPECTED);
-    console.log(`  ${label} build OK  ${INPUT}  ->  ${actual}`);
+    assert.equal(actual, expected);
+    console.log(`  ${label} ${what} OK  ->  ${actual}`);
   } catch {
-    console.error(`  ${label} build FAILED`);
-    console.error(`    expected: ${EXPECTED}`);
+    console.error(`  ${label} ${what} FAILED`);
+    console.error(`    expected: ${expected}`);
     console.error(`    actual:   ${actual}`);
     failed = true;
   }
+}
+
+for (const [label, mod] of [
+  ['ESM', esm],
+  ['CJS', cjs],
+]) {
+  for (const name of ['parsePartial', 'parsePartialResult', 'parseSettled']) {
+    if (typeof mod[name] !== 'function') {
+      console.error(`  ${label} does not export ${name}`);
+      failed = true;
+    }
+  }
+  if (failed) continue;
+
+  check(label, 'parsePartial      ', JSON.stringify(mod.parsePartial(INPUT)), EXPECTED_VALUE);
+
+  const settled = mod.parseSettled(INPUT);
+  check(label, 'parseSettled value', JSON.stringify(settled.value), EXPECTED_VALUE);
+  check(label, 'settledPaths      ', JSON.stringify(settled.settledPaths()), EXPECTED_SETTLED);
+  check(label, 'isSettled(a)      ', String(settled.isSettled('a')), 'true');
+  check(label, 'isSettled(b)      ', String(settled.isSettled('b')), 'false');
+  check(label, 'isSettled()==done ', String(settled.isSettled() === settled.complete), 'true');
 }
 
 if (failed) process.exit(1);

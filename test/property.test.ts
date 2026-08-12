@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { parsePartial, parsePartialResult } from '../src/index.js';
+import { parsePartial, parsePartialResult, parseSettled } from '../src/index.js';
 
 /**
  * The correctness argument for this library is not "here are some examples I
@@ -327,6 +327,153 @@ describe('prototype safety, generatively', () => {
         },
       ),
       { numRuns: runs(300) },
+    );
+  });
+});
+
+/**
+ * Settledness invariants.
+ *
+ * Settledness is the claim a caller acts on — commits a field, dispatches a
+ * request, marks a step done. A false positive is not a rendering glitch, it is
+ * acting on a value that then changes. So it is checked the same way as the
+ * parser itself: at every truncation index of generated documents.
+ */
+
+/** Resolve an RFC 6901 pointer against a parsed document. */
+function getByPointer(root: unknown, pointer: string): unknown {
+  if (pointer === '') return root;
+  let current: unknown = root;
+  for (const raw of pointer.slice(1).split('/')) {
+    const segment = raw.replace(/~1/g, '/').replace(/~0/g, '~');
+    current = Array.isArray(current)
+      ? current[Number(segment)]
+      : (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+describe('invariant 6 — a settled path already holds its final value', () => {
+  it('every settled path equals that path in the completed document', () => {
+    fc.assert(
+      fc.property(orderedJson, (value) => {
+        const text = JSON.stringify(value);
+        const full = JSON.parse(text);
+        for (let i = 0; i <= text.length; i++) {
+          const result = parseSettled(text.slice(0, i));
+          for (const pointer of result.settledPaths()) {
+            expect(getByPointer(result.value, pointer)).toEqual(
+              getByPointer(full, pointer),
+            );
+          }
+        }
+        return true;
+      }),
+      { numRuns: runs(200) },
+    );
+  });
+});
+
+describe('invariant 7 — settled paths only accumulate', () => {
+  it('the settled set at each index is a subset of the next', () => {
+    // `JSON.stringify` cannot emit a duplicate key, so the one documented
+    // exception — a later duplicate rebinding an already-settled path — cannot
+    // arise from generated documents.
+    fc.assert(
+      fc.property(orderedJson, (value) => {
+        const text = JSON.stringify(value);
+        let previous = new Set<string>();
+        for (let i = 0; i <= text.length; i++) {
+          const current = new Set(parseSettled(text.slice(0, i)).settledPaths());
+          for (const pointer of previous) {
+            if (!current.has(pointer)) return false;
+          }
+          previous = current;
+        }
+        return true;
+      }),
+      { numRuns: runs(200) },
+    );
+  });
+});
+
+describe('invariant 8 — the root agrees with `complete`', () => {
+  it('isSettled() equals complete at every index, under every option set', () => {
+    fc.assert(
+      fc.property(
+        orderedJson,
+        fc.constantFrom(...OPTION_MATRIX),
+        (value, options) => {
+          const text = JSON.stringify(value);
+          for (let i = 0; i <= text.length; i++) {
+            const slice = text.slice(0, i);
+            const result = parseSettled(slice, options);
+            if (result.isSettled() !== result.complete) return false;
+            // and `complete` itself must not have drifted from the older API
+            if (result.complete !== parsePartialResult(slice, options).complete) {
+              return false;
+            }
+          }
+          return true;
+        },
+      ),
+      { numRuns: runs(200) },
+    );
+  });
+});
+
+describe('invariant 9 — a finished document settles completely', () => {
+  it('every path in a fully parsed document is settled', () => {
+    fc.assert(
+      fc.property(
+        orderedJson,
+        fc.constantFrom({}, { streaming: false } as const),
+        (value, options) => {
+          const text = JSON.stringify(value);
+          const result = parseSettled(text, { ...options, streaming: false });
+          const settled = new Set(result.settledPaths());
+
+          const walk = (node: unknown, pointer: string): boolean => {
+            if (!settled.has(pointer)) return false;
+            if (Array.isArray(node)) {
+              return node.every((el, i) => walk(el, `${pointer}/${i}`));
+            }
+            if (typeof node === 'object' && node !== null) {
+              return Object.keys(node).every((k) =>
+                walk(
+                  (node as Record<string, unknown>)[k],
+                  `${pointer}/${k.replace(/~/g, '~0').replace(/\//g, '~1')}`,
+                ),
+              );
+            }
+            return true;
+          };
+
+          return result.complete && walk(result.value, '');
+        },
+      ),
+      { numRuns: runs(200) },
+    );
+  });
+});
+
+describe('invariant 10 — emitted and settled are independent', () => {
+  it('toggling partialNumbers never changes the settled set', () => {
+    // partialNumbers decides whether a half-arrived number is *emitted*. The
+    // path it would occupy is on the unsettled spine either way, so it can
+    // never be settled — and no other path is affected.
+    fc.assert(
+      fc.property(orderedJson, (value) => {
+        const text = JSON.stringify(value);
+        for (let i = 0; i <= text.length; i++) {
+          const slice = text.slice(0, i);
+          expect(parseSettled(slice, { partialNumbers: true }).settledPaths()).toEqual(
+            parseSettled(slice, { partialNumbers: false }).settledPaths(),
+          );
+        }
+        return true;
+      }),
+      { numRuns: runs(200) },
     );
   });
 });

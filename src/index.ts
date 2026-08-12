@@ -145,9 +145,31 @@ function assign(obj: Record<string, unknown>, key: string, value: unknown): void
   }
 }
 
-function parseNodes(src: string, opts: ResolvedOptions): Node {
+/** A location inside a parsed value: object keys and array indices. */
+export type Path = ReadonlyArray<string | number>;
+
+interface ParseOutcome {
+  node: Node;
+  /**
+   * The path to the deepest node that is not yet `done`, collected leaf-first
+   * (so the caller reverses it).
+   *
+   * A container stops at its first child that is not `done`, so the not-done
+   * nodes cannot branch — they form a single chain from the root down to
+   * whatever token the scanner was in the middle of. That chain is the only
+   * thing that needs recording: every other path in the value is finished.
+   *
+   * An empty spine on a not-done root means the root container itself is the
+   * deepest unsettled thing — its children all closed, but its own `]` or `}`
+   * has not arrived.
+   */
+  spine: Array<string | number>;
+}
+
+function parseNodes(src: string, opts: ResolvedOptions): ParseOutcome {
   const n = src.length;
   let i = 0;
+  const spine: Array<string | number> = [];
 
   function skipWhitespace(): void {
     while (i < n) {
@@ -315,8 +337,12 @@ function parseNodes(src: string, opts: ResolvedOptions): Node {
       const element = parseValue();
       if (element === null) return { v: arr, done: false };
       arr.push(element.v);
-      // An unfinished element means nothing can follow it yet.
-      if (!element.done) return { v: arr, done: false };
+      // An unfinished element means nothing can follow it yet, and it puts
+      // this index on the unsettled spine.
+      if (!element.done) {
+        spine.push(arr.length - 1);
+        return { v: arr, done: false };
+      }
 
       skipWhitespace();
       if (i >= n) return { v: arr, done: false };
@@ -357,7 +383,10 @@ function parseNodes(src: string, opts: ResolvedOptions): Node {
       const value = parseValue();
       if (value === null) return { v: obj, done: false };
       assign(obj, key.v as string, value.v);
-      if (!value.done) return { v: obj, done: false };
+      if (!value.done) {
+        spine.push(key.v as string);
+        return { v: obj, done: false };
+      }
 
       skipWhitespace();
       if (i >= n) return { v: obj, done: false };
@@ -388,7 +417,7 @@ function parseNodes(src: string, opts: ResolvedOptions): Node {
     return null;
   }
 
-  return parseValue();
+  return { node: parseValue(), spine };
 }
 
 function resolve(options?: ParseOptions): ResolvedOptions {
@@ -422,7 +451,7 @@ export function parsePartial<T = unknown>(
   options?: ParseOptions,
 ): T | undefined {
   if (typeof text !== 'string') return undefined;
-  const node = parseNodes(text, resolve(options));
+  const { node } = parseNodes(text, resolve(options));
   return node === null ? undefined : (node.v as T);
 }
 
@@ -442,7 +471,156 @@ export function parsePartialResult<T = unknown>(
   options?: ParseOptions,
 ): ParseResult<T> {
   if (typeof text !== 'string') return { value: undefined, complete: false };
-  const node = parseNodes(text, resolve(options));
+  const { node } = parseNodes(text, resolve(options));
   if (node === null) return { value: undefined, complete: false };
   return { value: node.v as T, complete: node.done };
+}
+
+/** Matches an array index written as a string, without leading zeros. */
+const INDEX = /^(0|[1-9]\d*)$/;
+
+/** Does `path` name something that actually exists in `root`? */
+function pathExists(root: unknown, path: Path): boolean {
+  if (root === undefined) return false;
+  let current: unknown = root;
+
+  for (const segment of path) {
+    if (Array.isArray(current)) {
+      let index: number;
+      if (typeof segment === 'number') index = segment;
+      else if (INDEX.test(segment)) index = Number(segment);
+      else return false;
+      if (!Number.isInteger(index) || index < 0 || index >= current.length) {
+        return false;
+      }
+      current = current[index];
+    } else if (typeof current === 'object' && current !== null) {
+      const key = String(segment);
+      if (!Object.prototype.hasOwnProperty.call(current, key)) return false;
+      current = (current as Record<string, unknown>)[key];
+    } else {
+      // A scalar has no children, so any remaining segment names nothing.
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Segments are compared as strings so an array index and the key that spells it
+ * are treated alike. This cannot conflate anything: at a given depth the value
+ * is either an array or an object, never both.
+ */
+function isPrefixOfSpine(path: Path, spine: Path): boolean {
+  if (path.length > spine.length) return false;
+  for (let k = 0; k < path.length; k++) {
+    if (String(path[k]) !== String(spine[k])) return false;
+  }
+  return true;
+}
+
+function collectPaths(value: unknown): Path[] {
+  if (value === undefined) return [];
+  const out: Path[] = [];
+
+  const walk = (node: unknown, path: Path): void => {
+    out.push(path);
+    if (Array.isArray(node)) {
+      node.forEach((element, index) => walk(element, [...path, index]));
+    } else if (typeof node === 'object' && node !== null) {
+      for (const key of Object.keys(node)) {
+        walk((node as Record<string, unknown>)[key], [...path, key]);
+      }
+    }
+  };
+
+  walk(value, []);
+  return out;
+}
+
+/** RFC 6901: `~` becomes `~0`, `/` becomes `~1`, and the root is `''`. */
+function toPointer(path: Path): string {
+  return path
+    .map((segment) => `/${String(segment).replace(/~/g, '~0').replace(/\//g, '~1')}`)
+    .join('');
+}
+
+/** A parse result that also reports which individual paths have stopped changing. */
+export interface SettledResult<T> {
+  /** The value recovered so far, as {@link parsePartial} would return it. */
+  value: T | undefined;
+  /** Whether the whole document is closed, as {@link parsePartialResult} reports it. */
+  complete: boolean;
+  /**
+   * Is the value at this path final?
+   *
+   * True only when the path exists in `value` *and* the token holding it has
+   * been closed off by its own syntax. A path that does not exist is not
+   * settled — absence is not finality.
+   *
+   * With no arguments this asks about the root, and always equals `complete`.
+   */
+  isSettled(...path: Array<string | number>): boolean;
+  /**
+   * Every settled path as an RFC 6901 JSON Pointer, with `''` for the root.
+   * Sorted shortest-first then lexicographically, and computed on call.
+   */
+  settledPaths(): string[];
+}
+
+/**
+ * Parse incomplete JSON and report which individual paths have stopped changing.
+ *
+ * `complete` answers "is the document finished?" — too coarse to act on. This
+ * answers it per field, so a caller can commit the parts that are final while
+ * the rest is still arriving:
+ *
+ * ```ts
+ * const r = parseSettled('{"city": "San Jose", "temp": 21');
+ * r.isSettled('city'); // true  — its closing quote arrived
+ * r.isSettled('temp'); // false — 21 may still become 210
+ * ```
+ *
+ * Settledness is permanent, with one documented exception: a duplicate key
+ * rebinds a path that already reported settled. See the README.
+ *
+ * Never throws, on any input.
+ */
+export function parseSettled<T = unknown>(
+  text: string,
+  options?: ParseOptions,
+): SettledResult<T> {
+  if (typeof text !== 'string') {
+    return {
+      value: undefined,
+      complete: false,
+      isSettled: () => false,
+      settledPaths: () => [],
+    };
+  }
+
+  const { node, spine } = parseNodes(text, resolve(options));
+  const value = node === null ? undefined : (node.v as T);
+  const complete = node !== null && node.done;
+
+  // `null` means nothing is unsettled. That is distinct from an empty spine,
+  // which means the root container itself is the deepest unsettled node.
+  const unsettled: Path | null = complete ? null : spine.slice().reverse();
+
+  const settled = (path: Path): boolean => {
+    if (!pathExists(value, path)) return false;
+    if (unsettled === null) return true;
+    return !isPrefixOfSpine(path, unsettled);
+  };
+
+  return {
+    value,
+    complete,
+    isSettled: (...path: Array<string | number>) => settled(path),
+    settledPaths: () =>
+      collectPaths(value)
+        .filter(settled)
+        .map(toPointer)
+        .sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)),
+  };
 }

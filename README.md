@@ -142,6 +142,44 @@ parsePartialResult('{"a": 1');  // { value: {},       complete: false }
 
 ---
 
+## Settled paths
+
+`complete` tells you the *document* finished. It cannot tell you which *fields*
+finished — and that is what decides whether you may act on one.
+
+```
+{"city": "San Jose", "temp": 21
+```
+
+`city` is final: its closing quote arrived. `temp` is not: `21` may still become
+`210`. Both render. Only one is safe to commit, dispatch, or mark done.
+
+```ts
+import { parseSettled } from 'json-so-far';
+
+const r = parseSettled('{"city": "San Jose", "temp": 21');
+
+r.value;             // { city: 'San Jose' }
+r.isSettled('city'); // true
+r.isSettled('temp'); // false — and false for any path not present
+r.settledPaths();    // ['/city']   RFC 6901 pointers, '' is the root
+r.isSettled();       // false — the root, always equal to r.complete
+```
+
+A path settles when its own syntax closes it: a string on its closing quote, a
+number on the delimiter after it, containers on their bracket, `true`/`false`/
+`null` when fully consumed. Being *emitted* and being *settled* are independent —
+`partialNumbers` moves the first and never the second.
+
+**This is the thing neither [`partial-json-parser`](https://www.npmjs.com/package/partial-json-parser)
+nor [`json-repair`](https://pypi.org/project/json-repair/) does.** They recover a
+value from incomplete JSON; neither reports per-field finality, so every field
+you get back is one you still cannot trust.
+
+Settledness is permanent, with one exception: a duplicate key rebinds an
+already-settled path, since last-wins matches `JSON.parse`. Detecting it would
+mean withholding every key until its object closed.
+
 ## How this is tested
 
 The claim is *reliable*, not *fast*, so the tests are the product. Correctness

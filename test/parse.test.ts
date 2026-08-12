@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePartial, parsePartialResult } from '../src/index.js';
+import { parsePartial, parsePartialResult, parseSettled } from '../src/index.js';
 
 /**
  * These tables are the specification. Every row is a decision about what to
@@ -447,6 +447,336 @@ describe('the streaming use case, end to end', () => {
     expect(parsePartial(full.slice(0, full.indexOf('"done"')))).toEqual({
       title: 'Hello',
       tags: ['a', 'b'],
+    });
+  });
+});
+
+/**
+ * Settledness — which individual paths have stopped changing.
+ *
+ * As with the emission table above, these rows are the specification. A path is
+ * settled when the token holding it was closed by its own syntax, so changing a
+ * row changes the contract.
+ */
+describe('settled paths', () => {
+  const settled = (text: string, options?: Parameters<typeof parseSettled>[1]) =>
+    parseSettled(text, options).settledPaths();
+
+  describe('a string settles when its closing quote is consumed', () => {
+    const cases: Array<[string, string[]]> = [
+      ['{"s": "', []],
+      ['{"s": "ab', []],
+      ['{"s": "ab"', ['/s']],
+      ['{"s": "ab"}', ['', '/s']],
+    ];
+    it.each(cases)('%j → %j', (input, expected) => {
+      expect(settled(input)).toEqual(expected);
+    });
+  });
+
+  describe('a number settles when a delimiter follows it', () => {
+    const cases: Array<[string, string[]]> = [
+      ['{"n": 1', []], // 1 may still become 10
+      ['{"n": 1 ', ['/n']], // whitespace is a delimiter
+      ['{"n": 1,', ['/n']],
+      ['{"n": 1}', ['', '/n']],
+      ['[1, 2', ['/0']],
+      ['[1, 2]', ['', '/0', '/1']],
+    ];
+    it.each(cases)('%j → %j', (input, expected) => {
+      expect(settled(input)).toEqual(expected);
+    });
+
+    it('settles at end of input only when the caller says input is final', () => {
+      expect(settled('{"n": 1')).toEqual([]);
+      expect(settled('{"n": 1', { streaming: false })).toEqual(['/n']);
+    });
+  });
+
+  describe('a literal settles as soon as it is unambiguous', () => {
+    // No JSON literal is a prefix of another, so the value is known before the
+    // token finishes — but the token must still complete to settle.
+    const cases: Array<[string, string[]]> = [
+      ['[tru', []],
+      ['[true', ['/0']],
+      ['[true]', ['', '/0']],
+      ['[fals', []],
+      ['[false', ['/0']],
+      ['[nul', []],
+      ['[null', ['/0']],
+    ];
+    it.each(cases)('%j → %j', (input, expected) => {
+      expect(settled(input)).toEqual(expected);
+    });
+  });
+
+  describe('containers settle when their bracket is consumed', () => {
+    const cases: Array<[string, string[]]> = [
+      ['[', []],
+      ['[]', ['']],
+      ['{', []],
+      ['{}', ['']],
+      ['{"o": {', []],
+      ['{"o": {}', ['/o']],
+      ['{"o": {}}', ['', '/o']],
+      ['{"a": []', ['/a']],
+      ['{"a": []}', ['', '/a']],
+    ];
+    it.each(cases)('%j → %j', (input, expected) => {
+      expect(settled(input)).toEqual(expected);
+    });
+  });
+
+  describe('nesting', () => {
+    it('settles the anchor example from the design', () => {
+      // The unsettled spine is ['b', 1]: the object, `b`, and `b[1]` are all
+      // unsettled; everything off that chain is settled.
+      const r = parseSettled('{"a": 1, "b": [10, 2');
+      expect(r.settledPaths()).toEqual(['/a', '/b/0']);
+      expect(r.isSettled()).toBe(false);
+      expect(r.isSettled('a')).toBe(true);
+      expect(r.isSettled('b')).toBe(false);
+      expect(r.isSettled('b', 0)).toBe(true);
+      expect(r.isSettled('b', 1)).toBe(false);
+    });
+
+    it('settles a closed inner container inside an open outer one', () => {
+      expect(settled('[[1]')).toEqual(['/0', '/0/0']);
+      expect(settled('[[1]]')).toEqual(['', '/0', '/0/0']);
+    });
+
+    it('settles every path once the whole document closes', () => {
+      expect(settled('{"a": {"b": [1, 2]}}')).toEqual([
+        '',
+        '/a',
+        '/a/b',
+        '/a/b/0',
+        '/a/b/1',
+      ]);
+    });
+  });
+
+  describe('paths that do not exist are never settled', () => {
+    it.each([
+      ['nope'],
+      ['a', 'deeper'],
+      ['0'],
+    ])('isSettled(%j, ...) → false', (...path) => {
+      expect(parseSettled('{"a": 1}').isSettled(...path)).toBe(false);
+    });
+
+    it('treats an out-of-range index as absent', () => {
+      const r = parseSettled('[1, 2]');
+      expect(r.isSettled(1)).toBe(true);
+      expect(r.isSettled(2)).toBe(false);
+      expect(r.isSettled(-1)).toBe(false);
+    });
+
+    it('returns false for everything when nothing parsed', () => {
+      const r = parseSettled('not json');
+      expect(r.value).toBeUndefined();
+      expect(r.isSettled()).toBe(false);
+      expect(r.settledPaths()).toEqual([]);
+    });
+  });
+
+  describe('JSON Pointer encoding', () => {
+    it('escapes ~ and / in keys, per RFC 6901', () => {
+      expect(settled('{"a/b": 1, "c~d": 2}')).toEqual(['', '/a~1b', '/c~0d']);
+    });
+
+    it('uses the empty string for the root', () => {
+      expect(parseSettled('{}').settledPaths()).toEqual(['']);
+    });
+
+    it('sorts shortest-first, then lexicographically', () => {
+      expect(settled('{"b": 1, "a": 2, "c": {"d": 3}}')).toEqual([
+        '',
+        '/a',
+        '/b',
+        '/c',
+        '/c/d',
+      ]);
+    });
+  });
+
+  describe('the root always agrees with `complete`', () => {
+    const inputs = [
+      '',
+      '{',
+      '{"a": 1',
+      '{"a": 1}',
+      '[1, 2',
+      '[1, 2]',
+      '123',
+      'true',
+      'not json',
+    ];
+    it.each(inputs)('%j', (input) => {
+      const r = parseSettled(input);
+      expect(r.isSettled()).toBe(r.complete);
+      expect(r.complete).toBe(parsePartialResult(input).complete);
+    });
+  });
+
+  describe('emitted and settled are independent', () => {
+    it('is unaffected by partialNumbers', () => {
+      // partialNumbers decides whether the value appears, never whether the
+      // path is final. An unterminated number is unsettled either way.
+      expect(settled('{"a": 12', { partialNumbers: true })).toEqual([]);
+      expect(settled('{"a": 12', { partialNumbers: false })).toEqual([]);
+      expect(parseSettled('{"a": 12', { partialNumbers: true }).value).toEqual({
+        a: 12,
+      });
+      expect(parseSettled('{"a": 12', { partialNumbers: false }).value).toEqual({});
+    });
+
+    it('is unaffected by partialStrings', () => {
+      expect(settled('{"a": "hi', { partialStrings: true })).toEqual([]);
+      expect(settled('{"a": "hi', { partialStrings: false })).toEqual([]);
+    });
+  });
+
+  describe('value is identical to parsePartial', () => {
+    it.each(['{"a": 1, "b": [10, 2', '{"s": "ab', '[true', '', 'garbage'])(
+      '%j',
+      (input) => {
+        expect(parseSettled(input).value).toEqual(parsePartial(input));
+      },
+    );
+  });
+
+  describe('path segments', () => {
+    // Indices may arrive as numbers or as canonical decimal strings. Anything
+    // else names nothing — notably `length`, which is a real own property of an
+    // array and would resolve if indices were looked up like object keys.
+    const eleven = parseSettled('[0,1,2,3,4,5,6,7,8,9,10]');
+
+    it.each([
+      [0, true],
+      [1, true],
+      [10, true],
+      ['0', true],
+      ['1', true],
+      ['10', true],
+    ])('accepts index %j → %j', (segment, expected) => {
+      expect(eleven.isSettled(segment)).toBe(expected);
+    });
+
+    it.each([
+      ['00'], // not canonical
+      ['01'], // leading zero
+      ['1x'], // trailing junk
+      ['x1'], // leading junk
+      [''], // Number('') is 0, which must not resolve
+      ['length'], // a real own property of the array
+      ['1.0'],
+      [' 1'],
+      [11], // out of range
+      [-1],
+      [1.5],
+    ])('rejects segment %j', (segment) => {
+      expect(eleven.isSettled(segment)).toBe(false);
+    });
+
+    it('does not descend through null', () => {
+      // `typeof null === 'object'`, so treating it as one would reach
+      // hasOwnProperty.call(null, ...) and throw.
+      const r = parseSettled('{"a": null}');
+      expect(r.isSettled('a')).toBe(true);
+      expect(() => r.isSettled('a', 'b')).not.toThrow();
+      expect(r.isSettled('a', 'b')).toBe(false);
+    });
+
+    it('does not descend through a scalar', () => {
+      const r = parseSettled('{"a": 1, "b": "s"}');
+      expect(r.isSettled('a', 'x')).toBe(false);
+      expect(r.isSettled('b', 0)).toBe(false);
+    });
+
+    it('reports nothing settled when no value parsed', () => {
+      // Absence is not finality: with no value, no path is settled — including
+      // paths that were never there to begin with.
+      for (const text of ['', 'not json', '-']) {
+        const r = parseSettled(text);
+        expect(r.isSettled()).toBe(false);
+        expect(r.isSettled('a')).toBe(false);
+        expect(r.isSettled('a', 'b')).toBe(false);
+        expect(r.isSettled(0)).toBe(false);
+        expect(r.settledPaths()).toEqual([]);
+      }
+    });
+
+    it('returns a safe empty result for non-string input', () => {
+      for (const bad of [null, undefined, 42, {}, ['x']]) {
+        const r = parseSettled(bad as unknown as string);
+        expect(r.value).toBeUndefined();
+        expect(r.complete).toBe(false);
+        expect(r.isSettled()).toBe(false);
+        expect(r.isSettled('a')).toBe(false);
+        expect(r.settledPaths()).toEqual([]);
+      }
+    });
+  });
+
+  describe('the spine is ordered root-first', () => {
+    it('settles only off a three-deep spine', () => {
+      // Spine ['x','y',1]. If the recorded chain were leaf-first, `/x` and
+      // `/x/y` would wrongly settle and `/x/y/0` would not.
+      const r = parseSettled('{"x": {"y": [1, 2');
+      expect(r.settledPaths()).toEqual(['/x/y/0']);
+      expect(r.isSettled('x')).toBe(false);
+      expect(r.isSettled('x', 'y')).toBe(false);
+      expect(r.isSettled('x', 'y', 0)).toBe(true);
+    });
+
+    it('does not treat a longer path as a prefix of the spine', () => {
+      // A key literally named `undefined` catches comparing past the end of
+      // the spine, where the missing segment stringifies to "undefined".
+      const r = parseSettled('{"a": {"undefined": 1, "x": 2');
+      expect(r.settledPaths()).toEqual(['/a/undefined']);
+      expect(r.isSettled('a', 'undefined')).toBe(true);
+      expect(r.isSettled('a')).toBe(false);
+    });
+  });
+
+  describe('ordering is total and deterministic', () => {
+    it('breaks length ties lexicographically, whatever the key order', () => {
+      const r = parseSettled('{"d": 1, "b": 2, "a": 3, "c": 4}');
+      expect(r.settledPaths()).toEqual(['', '/a', '/b', '/c', '/d']);
+    });
+
+    it('orders by length before lexicography', () => {
+      // '/zz' sorts after '/a' by length even though 'z' > 'a' either way;
+      // '/a/b' is longer than '/zz' and must come last.
+      const r = parseSettled('{"zz": {"q": 1}, "a": 2}');
+      expect(r.settledPaths()).toEqual(['', '/a', '/zz', '/zz/q']);
+    });
+
+    it('is stable across repeated calls', () => {
+      const r = parseSettled('{"b": 1, "a": {"d": 2, "c": 3}}');
+      expect(r.settledPaths()).toEqual(r.settledPaths());
+      expect(r.settledPaths()).toEqual(['', '/a', '/b', '/a/c', '/a/d']);
+    });
+  });
+
+  // The one case where settledness is not permanent. Documented in the README
+  // rather than worked around: last-wins matches JSON.parse, and detecting it
+  // would mean withholding every key until the object closes.
+  describe('duplicate keys rebind a settled path', () => {
+    it('reports settled, then changes value when the key is rebound', () => {
+      const first = parseSettled<{ a: number }>('{"a": 1,');
+      expect(first.isSettled('a')).toBe(true);
+      expect(first.value?.a).toBe(1);
+
+      const second = parseSettled<{ a: number }>('{"a": 1, "a": 2}');
+      expect(second.value?.a).toBe(2);
+      expect(second.isSettled('a')).toBe(true);
+    });
+
+    it('matches JSON.parse on the completed document', () => {
+      const text = '{"a": 1, "a": 2}';
+      expect(parseSettled(text).value).toEqual(JSON.parse(text));
     });
   });
 });

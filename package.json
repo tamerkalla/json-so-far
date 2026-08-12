@@ -1,6 +1,6 @@
 {
   "name": "json-so-far",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Best-effort parser for JSON that hasn't finished arriving. Render streaming LLM output before the closing brace shows up. Zero dependencies, never throws.",
   "keywords": [
     "json",
