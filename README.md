@@ -2,7 +2,7 @@
 
 **A best-effort parser for JSON that hasn't finished arriving.**
 
-[![CI](https://github.com/tamerkalla/Json-parser/actions/workflows/ci.yml/badge.svg)](https://github.com/tamerkalla/Json-parser/actions/workflows/ci.yml)
+[![CI](https://github.com/tamerkalla/json-so-far/actions/workflows/ci.yml/badge.svg)](https://github.com/tamerkalla/json-so-far/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/json-so-far.svg)](https://www.npmjs.com/package/json-so-far)
 [![mutation score](https://img.shields.io/badge/mutation%20score-PENDING-blue.svg)](#how-this-is-tested)
 [![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)

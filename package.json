@@ -21,13 +21,13 @@
   ],
   "license": "MIT",
   "author": "Tamer Kalla (https://github.com/tamerkalla)",
-  "homepage": "https://github.com/tamerkalla/Json-parser#readme",
+  "homepage": "https://github.com/tamerkalla/json-so-far#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tamerkalla/Json-parser.git"
+    "url": "git+https://github.com/tamerkalla/json-so-far.git"
   },
   "bugs": {
-    "url": "https://github.com/tamerkalla/Json-parser/issues"
+    "url": "https://github.com/tamerkalla/json-so-far/issues"
   },
   "type": "module",
   "main": "./dist/index.cjs",
