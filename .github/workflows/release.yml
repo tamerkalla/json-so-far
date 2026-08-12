@@ -73,8 +73,32 @@ jobs:
             exit 1
           fi
 
+      # Makes the workflow idempotent. npm rejects republishing a version that
+      # already exists, which would turn any re-run into a red build — running
+      # a release twice is a no-op, not an error, and it should look like one.
+      # It also means tagging a version that was already published (say, after
+      # a manual dispatch) reports green and simply skips the publish.
+      - name: Check whether this version is already on npm
+        id: published
+        run: |
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          CODE="$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$NAME/$VERSION")"
+          if [ "$CODE" = "200" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "$NAME@$VERSION is already published — skipping." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$CODE" = "404" ]; then
+            echo "already=false" >> "$GITHUB_OUTPUT"
+            echo "Publishing $NAME@$VERSION." >> "$GITHUB_STEP_SUMMARY"
+          else
+            # Don't silently skip on a registry hiccup — fail loudly instead.
+            echo "Unexpected status $CODE from the npm registry." >&2
+            exit 1
+          fi
+
       # No NODE_AUTH_TOKEN: the OIDC identity granted by `id-token: write`
       # above is the credential. Provenance is signed with that same identity,
       # publishing a verifiable link from the tarball on npm back to this commit.
       - name: Publish
+        if: steps.published.outputs.already == 'false'
         run: npm publish --provenance --access public
