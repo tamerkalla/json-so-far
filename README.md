@@ -2,10 +2,11 @@
 
 **A best-effort parser for JSON that hasn't finished arriving.**
 
-[![CI](https://github.com/tamerkalla/json-so-far/actions/workflows/ci.yml/badge.svg)](https://github.com/tamerkalla/json-so-far/actions/workflows/ci.yml)
+[![build](https://github.com/tamerkalla/json-so-far/actions/workflows/release.yml/badge.svg)](https://github.com/tamerkalla/json-so-far/actions/workflows/release.yml)
 [![npm](https://img.shields.io/npm/v/json-so-far.svg)](https://www.npmjs.com/package/json-so-far)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![provenance](https://img.shields.io/badge/provenance-attested-brightgreen.svg)](https://www.npmjs.com/package/json-so-far)
 [![mutation score](https://img.shields.io/badge/mutation%20score-88.55%25-brightgreen.svg)](#mutation-score-8855)
-[![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 
 An LLM streams you this:
 
@@ -215,6 +216,9 @@ npm run mutation
 CI fails the build below 85% and uploads the full HTML report as an artifact on
 every run.
 
+See [VERIFY.md](VERIFY.md) to reproduce the headline claim from the published
+package, in a clean directory.
+
 The mutation run uses fewer fast-check iterations than the normal test job
 (`FC_RUNS_SCALE`), because Stryker re-runs the covering tests once per mutant
 and full strength turned a four-minute job into half an hour. This costs
@@ -288,11 +292,12 @@ That constraint shaped the design more than it might seem:
   the cases you would not have thought of.
 - **Mutation score as the quality gate.** A number that is hard to fool, checked
   by a machine, readable at a glance.
-- **Releasing is a version bump.** Change `version` in `package.json`, push to
-  `main`, and CI publishes to npm and cuts the tag and GitHub Release itself.
-  No tag ceremony, no release page to fill in, no credential: publishing
-  authenticates with [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers),
-  so there is no token stored in the repository at all.
+- **Releasing is a button.** Run the Release workflow from the Actions tab,
+  pick a bump, and CI verifies, versions, tags, publishes, and cuts the
+  GitHub Release itself. No tag ceremony, no release page to fill in, no
+  credential: publishing authenticates with [npm Trusted
+  Publishing](https://docs.npmjs.com/trusted-publishers), so there is no
+  token stored in the repository at all.
 
 ---
 

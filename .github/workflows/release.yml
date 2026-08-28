@@ -1,36 +1,32 @@
 name: Release
 
-# Publishing is a button, not a terminal session: cut a GitHub Release with a
-# `v*` tag, and npm gets the package.
+# push to main      fires on every push, but releases only when package.json
+#                   still reads 0.0.0 (the pre-release placeholder). Every
+#                   later push is a verify-only no-op release-wise.
+# workflow_dispatch every real release, taking bump and auth as inputs.
 #
-# Authentication is npm Trusted Publishing (OIDC). There is no token here and
-# no NPM_TOKEN secret: GitHub mints a short-lived credential for this specific
-# workflow run, and npm accepts it because the package's trusted-publisher
-# settings name this repository and this workflow file. Nothing long-lived
-# exists to leak, expire, or rotate.
+# No tag trigger. This workflow creates the tag itself — a tag trigger
+# would race it and try to publish the same version twice.
 #
-# The trust relationship lives on npm, at
-# npmjs.com/package/json-so-far → Settings → Trusted Publisher:
-#   organization/user: tamerkalla
-#   repository:        json-so-far
-#   workflow:          release.yml
-#
-# Renaming this file, the repo, or the owner breaks publishing until that
-# config is updated to match.
-
-# Releasing is a version bump. Change `version` in package.json, push to main,
-# and this publishes to npm and creates the matching tag and GitHub Release on
-# its own. Pushes that do not change the version cost about a minute and skip
-# the publish, because the check is "is this version on npm yet", not "did this
-# commit touch package.json".
-#
-# The `v*` tag trigger is kept so a hand-cut tag still works.
-
+# Authentication is npm Trusted Publishing (OIDC) by default. There is no
+# long-lived NPM_TOKEN secret: GitHub mints a short-lived credential for this
+# specific workflow run, and npm accepts it because the package's
+# trusted-publisher settings name this repository and this workflow file.
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver bump to apply before publishing
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+      auth:
+        description: 'oidc = trusted publishing. token = FIRST PUBLISH ONLY.'
+        type: choice
+        default: oidc
+        options: [oidc, token]
 
 permissions:
   contents: read
@@ -40,20 +36,53 @@ jobs:
     name: publish to npm
     runs-on: ubuntu-latest
     permissions:
-      contents: write # to create the tag and GitHub Release
-      id-token: write # required for npm provenance
+      contents: write # push the version commit + tag, create the Release
+      id-token: write # npm trusted publishing (OIDC)
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
+      # One step decides everything, so every later step is a string
+      # comparison. ubuntu-latest ships Node, so this runs before setup-node.
+      - name: Plan
+        id: plan
+        run: |
+          v=$(node -p "require('./package.json').version")
+          echo "version_before=$v" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "release=true"             >> "$GITHUB_OUTPUT"
+            echo "bump=${{ inputs.bump }}"  >> "$GITHUB_OUTPUT"
+            echo "auth=${{ inputs.auth }}"  >> "$GITHUB_OUTPUT"
+          elif [ "$v" = "0.0.0" ]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "bump=minor"   >> "$GITHUB_OUTPUT"
+            echo "auth=token"   >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "bump=none"     >> "$GITHUB_OUTPUT"
+            echo "auth=none"     >> "$GITHUB_OUTPUT"
+          fi
+
+      # Two setup steps, not one. Supplying a registry URL to setup-node makes
+      # it write an .npmrc carrying a token placeholder and export that
+      # variable JOB-WIDE. npm then finds a configured credential, never
+      # attempts the OIDC exchange, and authenticates as nobody. So the OIDC
+      # path must not carry that input at all. npm defaults to
+      # registry.npmjs.org regardless, so nothing is lost. Do not add it back.
       - uses: actions/setup-node@v4
+        if: ${{ steps.plan.outputs.auth == 'token' }}
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/setup-node@v4
+        if: ${{ steps.plan.outputs.auth != 'token' }}
+        with:
+          node-version: '22'
           cache: npm
 
-      # Node 22 ships npm 10.x; Trusted Publishing needs 11.5.1+. Without this
-      # the publish step fails with an authentication error rather than
-      # anything that points at the npm version.
+      # Node 22 ships npm 10.x; Trusted Publishing needs 11.5.1+.
       - name: Upgrade npm for Trusted Publishing support
         run: |
           npm install -g npm@latest
@@ -62,86 +91,49 @@ jobs:
       - run: npm ci
 
       # Never ship a red build.
-      - name: Typecheck
-        run: npm run typecheck
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Verify both published entry points load and behave
+        run: node scripts/smoke.mjs
 
-      - name: Test
-        run: npm test
-
-      - name: Build
-        run: npm run build
-
-      - name: Check the tag matches package.json
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Bump version and tag
+        id: bump
+        if: ${{ steps.plan.outputs.release == 'true' }}
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          PKG="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "$PKG" ]; then
-            echo "Tag v$TAG does not match package.json version $PKG." >&2
-            echo "Bump the version in package.json, or retag." >&2
-            exit 1
-          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          version="$(npm version '${{ steps.plan.outputs.bump }}' -m 'Release v%s')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Bumped to $version"
 
-      # Makes the workflow idempotent. npm rejects republishing a version that
-      # already exists, which would turn any re-run into a red build — running
-      # a release twice is a no-op, not an error, and it should look like one.
-      # It also means tagging a version that was already published (say, after
-      # a manual dispatch) reports green and simply skips the publish.
-      - name: Check whether this version is already on npm
-        id: published
-        run: |
-          NAME="$(node -p "require('./package.json').name")"
-          VERSION="$(node -p "require('./package.json').version")"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          CODE="$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$NAME/$VERSION")"
-          if [ "$CODE" = "200" ]; then
-            echo "already=true" >> "$GITHUB_OUTPUT"
-            echo "$NAME@$VERSION is already published — skipping." >> "$GITHUB_STEP_SUMMARY"
-          elif [ "$CODE" = "404" ]; then
-            echo "already=false" >> "$GITHUB_OUTPUT"
-            echo "Publishing $NAME@$VERSION." >> "$GITHUB_STEP_SUMMARY"
-          else
-            # Don't silently skip on a registry hiccup — fail loudly instead.
-            echo "Unexpected status $CODE from the npm registry." >&2
-            exit 1
-          fi
+      # Publish before pushing: if this fails, main keeps the old version and
+      # the run can simply be repeated. The reverse order would strand a
+      # version in git that does not exist on npm.
+      - name: Publish (token)
+        if: ${{ steps.plan.outputs.release == 'true' && steps.plan.outputs.auth == 'token' }}
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # No NODE_AUTH_TOKEN: the OIDC identity granted by `id-token: write`
-      # above is the credential. Provenance is signed with that same identity,
-      # publishing a verifiable link from the tarball on npm back to this commit.
-      - name: Publish
-        if: steps.published.outputs.already == 'false'
-        run: npm publish --provenance --access public
+      # No auth variable in env: under OIDC it must be absent entirely,
+      # not empty. Do not add one back.
+      - name: Publish (OIDC)
+        if: ${{ steps.plan.outputs.release == 'true' && steps.plan.outputs.auth != 'token' }}
+        run: npm publish --access public
 
-      # Only after a successful publish, so the tag never points at something
-      # that failed to ship. Skipped when the run was itself started by a tag,
-      # which would already have created it.
+      - name: Push the version commit and tag
+        if: ${{ steps.plan.outputs.release == 'true' }}
+        run: git push origin HEAD:main --follow-tags
+
+      # Last, deliberately: npm and git are both already correct by the time
+      # this runs, so a failure here leaves the published package and the
+      # pushed tag untouched and the release can be made by hand from the tag.
       #
-      # `gh release create` makes the tag and the Release together. Using
-      # GITHUB_TOKEN is deliberate: releases it creates do not trigger further
-      # workflow runs, so this cannot re-enter the workflow.
-      - name: Tag and create the GitHub Release
-        if: >-
-          steps.published.outputs.already == 'false' &&
-          !startsWith(github.ref, 'refs/tags/')
+      # gh release create with GITHUB_TOKEN is deliberate: a release it
+      # creates does not trigger further workflow runs.
+      - name: Create GitHub Release
+        if: ${{ steps.plan.outputs.release == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.published.outputs.version }}
-        run: |
-          if gh release view "v$VERSION" >/dev/null 2>&1; then
-            echo "Release v$VERSION already exists."
-            exit 0
-          fi
-          NOTES="$(awk -v ver="$VERSION" '
-            $0 ~ "^## \\[" ver "\\]" { grabbing = 1; next }
-            grabbing && /^## \[/     { exit }
-            grabbing                 { print }
-          ' CHANGELOG.md)"
-          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
-            NOTES="See CHANGELOG.md."
-          fi
-          gh release create "v$VERSION" \
-            --target "$GITHUB_SHA" \
-            --title "v$VERSION" \
-            --notes "$NOTES"
-          echo "Created release v$VERSION." >> "$GITHUB_STEP_SUMMARY"
+        run: gh release create "v${{ steps.bump.outputs.version }}" --title "v${{ steps.bump.outputs.version }}" --generate-notes

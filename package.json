@@ -42,7 +42,8 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "VERIFY.md"
   ],
   "sideEffects": false,
   "engines": {
@@ -51,6 +52,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --sourcemap",
     "typecheck": "tsc --noEmit",
+    "pretest": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
@@ -59,12 +61,14 @@
   },
   "devDependencies": {
     "@stryker-mutator/core": "^8.7.1",
+    "@types/node": "^22.10.2",
     "@stryker-mutator/vitest-runner": "^8.7.1",
     "@vitest/coverage-v8": "^2.1.9",
     "fast-check": "^3.23.2",
     "tsup": "^8.3.6",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "yaml": "^2.9.0"
   },
   "publishConfig": {
     "access": "public",
