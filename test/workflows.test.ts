@@ -99,6 +99,17 @@ describe(".github/workflows/release.yml", () => {
     expect(plan?.run ?? "").toContain("release=false");
   });
 
+  test("the bump step's version output is read from package.json, never captured from npm version's stdout", () => {
+    // npm version prints the new version WITH a leading "v" ("v0.2.2"). The
+    // release step does `gh release create "v${{ steps.bump.outputs.version }}"`,
+    // so if that output is ever npm version's own stdout instead of a fresh
+    // read of package.json, the tag and release title come out "vv0.2.2".
+    const bump = release.jobs["publish"]?.steps.find((s) => s.name === "Bump version and tag");
+    const run = bump?.run ?? "";
+    expect(run).toMatch(/version="\$\(node -p "require\('\.\/package\.json'\)\.version"\)"/);
+    expect(run).not.toMatch(/version="\$\(npm version/);
+  });
+
   test("never publishes without first verifying: test precedes any publish step", () => {
     const steps = release.jobs["publish"]?.steps ?? [];
     const names = steps.map((s) => s.name ?? s.run ?? s.uses ?? "");

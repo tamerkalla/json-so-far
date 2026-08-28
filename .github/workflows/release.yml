@@ -103,7 +103,8 @@ jobs:
         run: |
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          version="$(npm version '${{ steps.plan.outputs.bump }}' -m 'Release v%s')"
+          npm version '${{ steps.plan.outputs.bump }}' -m 'Release v%s'
+          version="$(node -p "require('./package.json').version")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Bumped to $version"
 

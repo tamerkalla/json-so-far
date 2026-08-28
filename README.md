@@ -277,27 +277,14 @@ a debounce (say every 50 ms) rather than every token.
 
 ---
 
-## Built and tested entirely from a phone
+## Releasing
 
-This repository is an experiment in whether a genuinely reliable library can be
-produced without ever opening a laptop, using [Claude Code](https://claude.com/claude-code)
-from the mobile app.
-
-That constraint shaped the design more than it might seem:
-
-- **One source file, one library.** Nothing to navigate.
-- **CI is the test runner.** Nothing is run locally; you read a green check.
-- **Property tests over example tests.** Twenty lines of generator beats two
-  hundred hand-written cases you cannot review on a small screen — and finds
-  the cases you would not have thought of.
-- **Mutation score as the quality gate.** A number that is hard to fool, checked
-  by a machine, readable at a glance.
-- **Releasing is a button.** Run the Release workflow from the Actions tab,
-  pick a bump, and CI verifies, versions, tags, publishes, and cuts the
-  GitHub Release itself. No tag ceremony, no release page to fill in, no
-  credential: publishing authenticates with [npm Trusted
-  Publishing](https://docs.npmjs.com/trusted-publishers), so there is no
-  token stored in the repository at all.
+Releasing is a button: run the Release workflow from the Actions tab, pick a
+bump, and CI verifies, versions, tags, publishes, and cuts the GitHub Release
+itself. No tag ceremony, no release page to fill in, no credential:
+publishing authenticates with [npm Trusted
+Publishing](https://docs.npmjs.com/trusted-publishers), so there is no token
+stored in the repository at all.
 
 ---
 
