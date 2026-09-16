@@ -1,5 +1,5 @@
 /**
- * json-so-far — a best-effort parser for JSON that has not finished arriving.
+ * json-so-far, a best-effort parser for JSON that has not finished arriving.
  *
  * The problem: an LLM streams you `{"title": "The Rise of` and your UI has to
  * render something. `JSON.parse` throws. This returns `{ title: "The Rise of" }`.
@@ -10,7 +10,7 @@
  *     for any input, ever. This is enforced by property tests.
  *  2. **Never guess forward.** Output is always a *prefix* of what the completed
  *     value will be. We emit what has definitely arrived and nothing more, so a
- *     rendered UI only ever grows — it never has to retract a wrong value.
+ *     rendered UI only ever grows, it never has to retract a wrong value.
  *  3. **Be explicit at the boundary.** Every decision about a half-arrived token
  *     is documented and table-tested, because that is exactly where other
  *     libraries in this space disagree with each other.
@@ -38,7 +38,7 @@ export interface ParseOptions {
    * `'{"a": 12'` → `{ a: 12 }` when `true`, `{}` when `false`.
    *
    * **Off by default, deliberately.** Unlike strings, a truncated number is not
-   * a harmless prefix of the final value — it is a *different number*. `12` is
+   * a harmless prefix of the final value, it is a *different number*. `12` is
    * a prefix of the text `125`, but rendering "12" to a user who will shortly
    * see "125" is a lie, and `0.5` truncated to `0` inverts its meaning. Turn
    * this on only when a jittery number is better than a missing one.
@@ -51,11 +51,11 @@ export interface ParseOptions {
    * Whether more input may still arrive.
    *
    * When `true` (the default), a token that runs to the end of the buffer is
-   * treated as unfinished, because it could still grow — `123` might become
+   * treated as unfinished, because it could still grow, `123` might become
    * `1234`, and `"ab` will certainly become something longer.
    *
    * Set to `false` when you hold the *final* buffer and simply want to salvage
-   * whatever is there — the classic "the model hit its token limit mid-object"
+   * whatever is there, the classic "the model hit its token limit mid-object"
    * repair case. End-of-input then terminates the last token instead of
    * invalidating it, and `partialStrings` / `partialNumbers` no longer apply
    * because nothing is partial any more.
@@ -72,7 +72,7 @@ export interface ParseResult<T> {
   /**
    * `true` when the value was closed off by its own syntax (a `}`, `]`, or
    * closing quote) and therefore cannot grow. A `false` here means "keep
-   * feeding me" — it does not mean the input was malformed.
+   * feeding me", it does not mean the input was malformed.
    */
   complete: boolean;
 }
@@ -85,7 +85,7 @@ interface ResolvedOptions {
 
 /**
  * A parsed value plus whether its own syntax terminated it. `null` is used for
- * "nothing determinable here" — deliberately distinct from a determinable JSON
+ * "nothing determinable here", deliberately distinct from a determinable JSON
  * `null`, which is `{ v: null, done: true }`.
  */
 type Node = { v: unknown; done: boolean } | null;
@@ -128,7 +128,7 @@ const ESCAPES: Record<string, string> = {
  * Assign a key without letting `__proto__` reach the prototype chain.
  *
  * `obj['__proto__'] = v` invokes the inherited setter and mutates the object's
- * prototype instead of creating a property — the classic prototype-pollution
+ * prototype instead of creating a property, the classic prototype-pollution
  * sink, and a live bug in more than one JSON-repair package. `defineProperty`
  * creates a plain own property, which is also exactly what `JSON.parse` does.
  */
@@ -155,12 +155,12 @@ interface ParseOutcome {
    * (so the caller reverses it).
    *
    * A container stops at its first child that is not `done`, so the not-done
-   * nodes cannot branch — they form a single chain from the root down to
+   * nodes cannot branch, they form a single chain from the root down to
    * whatever token the scanner was in the middle of. That chain is the only
    * thing that needs recording: every other path in the value is finished.
    *
    * An empty spine on a not-done root means the root container itself is the
-   * deepest unsettled thing — its children all closed, but its own `]` or `}`
+   * deepest unsettled thing, its children all closed, but its own `]` or `}`
    * has not arrived.
    */
   spine: Array<string | number>;
@@ -174,7 +174,7 @@ function parseNodes(src: string, opts: ResolvedOptions): ParseOutcome {
   function skipWhitespace(): void {
     while (i < n) {
       const c = src.charCodeAt(i);
-      // space, tab, newline, carriage return — the only whitespace JSON allows
+      // space, tab, newline, carriage return, the only whitespace JSON allows
       if (c === 32 || c === 9 || c === 10 || c === 13) i++;
       else break;
     }
@@ -195,7 +195,7 @@ function parseNodes(src: string, opts: ResolvedOptions): ParseOutcome {
       i = n;
       return { v: value, done: !opts.streaming };
     }
-    // Mismatch with input still to spare — malformed, not partial.
+    // Mismatch with input still to spare, malformed, not partial.
     return null;
   }
 
@@ -291,7 +291,7 @@ function parseNodes(src: string, opts: ResolvedOptions): ParseOutcome {
       if (esc === 'u') {
         const hex = src.slice(p + 2, p + 6);
         if (hex.length < 4) {
-          // `\u12` at the end of the buffer — the code point is not knowable
+          // `\u12` at the end of the buffer, the code point is not knowable
           // yet, so emit the string without it.
           p = n;
           break;
@@ -307,8 +307,8 @@ function parseNodes(src: string, opts: ResolvedOptions): ParseOutcome {
           p += 6;
         }
       } else {
-        // `\b`-style escapes decode via the table; everything else — including
-        // `\"`, `\\`, `\/` and the non-standard escapes models emit — decodes
+        // `\b`-style escapes decode via the table; everything else, including
+        // `\"`, `\\`, `\/` and the non-standard escapes models emit, decodes
         // to the escaped character itself.
         out += ESCAPES[esc] ?? esc;
         p += 2;
@@ -556,7 +556,7 @@ export interface SettledResult<T> {
    *
    * True only when the path exists in `value` *and* the token holding it has
    * been closed off by its own syntax. A path that does not exist is not
-   * settled — absence is not finality.
+   * settled, absence is not finality.
    *
    * With no arguments this asks about the root, and always equals `complete`.
    */
@@ -571,14 +571,14 @@ export interface SettledResult<T> {
 /**
  * Parse incomplete JSON and report which individual paths have stopped changing.
  *
- * `complete` answers "is the document finished?" — too coarse to act on. This
+ * `complete` answers "is the document finished?", too coarse to act on. This
  * answers it per field, so a caller can commit the parts that are final while
  * the rest is still arriving:
  *
  * ```ts
  * const r = parseSettled('{"city": "San Jose", "temp": 21');
- * r.isSettled('city'); // true  — its closing quote arrived
- * r.isSettled('temp'); // false — 21 may still become 210
+ * r.isSettled('city'); // true, its closing quote arrived
+ * r.isSettled('temp'); // false, 21 may still become 210
  * ```
  *
  * Settledness is permanent, with one documented exception: a duplicate key

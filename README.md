@@ -58,7 +58,7 @@ return (
 );
 ```
 
-Salvaging a response that got cut off by a token limit — a different job, one flag:
+Salvaging a response that got cut off by a token limit, a different job, one flag:
 
 ```ts
 parsePartial(truncatedResponse, { streaming: false });
@@ -78,7 +78,7 @@ breaking change.
 | `{` | `{}` | |
 | `{"na` | `{}` | A half-arrived key names nothing |
 | `{"name"` | `{}` | Key known, but no value has started |
-| `{"name":` | `{}` | Same — we will not invent a value |
+| `{"name":` | `{}` | Same, we will not invent a value |
 | `{"name": "` | `{ name: '' }` | The string has begun |
 | `{"name": "Al` | `{ name: 'Al' }` | A prefix is truthful |
 | `{"name": "Al",` | `{ name: 'Al' }` | |
@@ -87,7 +87,7 @@ breaking change.
 | `[1, 2]` | `[1, 2]` | The `]` proves `2` finished |
 | `[tru` | `[true]` | Nothing but `true` starts with `tru` |
 | `[nul` | `[null]` | Same reasoning |
-| `[tx` | `[]` | Already invalid — not partial, just wrong |
+| `[tx` | `[]` | Already invalid, not partial, just wrong |
 | `["ab\` | `['ab']` | A dangling escape is dropped, not emitted |
 | `["ab\u00` | `['ab']` | The code point is not knowable yet |
 | `["\uD83D` | `['\uD83D']` | Lone surrogate; its partner joins next chunk |
@@ -98,7 +98,7 @@ breaking change.
 Strings and numbers are not symmetrical, and treating them the same is the most
 common way to get this wrong.
 
-A truncated string is a **prefix** of the final string — `"Al"` is genuinely the
+A truncated string is a **prefix** of the final string, `"Al"` is genuinely the
 beginning of `"Alice"`, and showing it to a user is honest.
 
 A truncated number is a **different number**. `12` is a prefix of the *text*
@@ -131,7 +131,7 @@ parsePartialResult('{"a": 1}'); // { value: { a: 1 }, complete: true }
 parsePartialResult('{"a": 1');  // { value: {},       complete: false }
 ```
 
-`complete: false` means "keep feeding me" — not "your input was malformed".
+`complete: false` means "keep feeding me", not "your input was malformed".
 
 ### Options
 
@@ -139,14 +139,14 @@ parsePartialResult('{"a": 1');  // { value: {},       complete: false }
 | --- | --- | --- |
 | `partialStrings` | `true` | Emit the characters of a string that have arrived |
 | `partialNumbers` | `false` | Emit the longest complete numeric prefix ([why](#why-numbers-are-withheld-by-default)) |
-| `streaming` | `true` | Whether more input may still arrive. `false` treats end-of-input as the end of the last token — the "salvage a truncated response" mode |
+| `streaming` | `true` | Whether more input may still arrive. `false` treats end-of-input as the end of the last token, the "salvage a truncated response" mode |
 
 ---
 
 ## Settled paths
 
 `complete` tells you the *document* finished. It cannot tell you which *fields*
-finished — and that is what decides whether you may act on one.
+finished, and that is what decides whether you may act on one.
 
 ```
 {"city": "San Jose", "temp": 21
@@ -162,14 +162,14 @@ const r = parseSettled('{"city": "San Jose", "temp": 21');
 
 r.value;             // { city: 'San Jose' }
 r.isSettled('city'); // true
-r.isSettled('temp'); // false — and false for any path not present
+r.isSettled('temp'); // false, and false for any path not present
 r.settledPaths();    // ['/city']   RFC 6901 pointers, '' is the root
-r.isSettled();       // false — the root, always equal to r.complete
+r.isSettled();       // false, the root, always equal to r.complete
 ```
 
 A path settles when its own syntax closes it: a string on its closing quote, a
 number on the delimiter after it, containers on their bracket, `true`/`false`/
-`null` when fully consumed. Being *emitted* and being *settled* are independent —
+`null` when fully consumed. Being *emitted* and being *settled* are independent 
 `partialNumbers` moves the first and never the second.
 
 **This is the thing neither [`partial-json-parser`](https://www.npmjs.com/package/partial-json-parser)
@@ -191,11 +191,11 @@ from about twenty lines of [fast-check](https://fast-check.dev).
 
 | # | Invariant |
 | --- | --- |
-| 1 | **Never throws** — any string, any truncation, any option combination |
+| 1 | **Never throws**, any string, any truncation, any option combination |
 | 2 | **Output is a truthful prefix** of the completed value. Arrays are never too long, object keys are the first keys in order, strings are character prefixes, numbers are exact |
 | 3 | **The last index reproduces `JSON.parse` exactly** |
-| 4 | **Output only ever grows** — index `i`'s result is always a prefix of index `i+1`'s. This is what makes rendering it directly safe |
-| 5 | **Chunk boundaries are irrelevant** — the same bytes in 1-byte or 7-byte chunks give the same answer |
+| 4 | **Output only ever grows**, index `i`'s result is always a prefix of index `i+1`'s. This is what makes rendering it directly safe |
+| 5 | **Chunk boundaries are irrelevant**, the same bytes in 1-byte or 7-byte chunks give the same answer |
 
 Plus: no generated document can pollute `Object.prototype` (see below).
 
@@ -203,8 +203,8 @@ Plus: no generated document can pollute `Object.prototype` (see below).
 
 Line coverage tells you a line *ran*. It does not tell you a test would have
 **noticed** if that line were wrong. [Stryker](https://stryker-mutator.io)
-answers the second question by deliberately corrupting the source — flipping
-`<` to `<=`, deleting statements, negating conditions — and checking that the
+answers the second question by deliberately corrupting the source, flipping
+`<` to `<=`, deleting statements, negating conditions, and checking that the
 suite fails each time.
 
 **464 of 524 mutants detected.** Run it yourself:
@@ -222,7 +222,7 @@ package, in a clean directory.
 The mutation run uses fewer fast-check iterations than the normal test job
 (`FC_RUNS_SCALE`), because Stryker re-runs the covering tests once per mutant
 and full strength turned a four-minute job into half an hour. This costs
-nothing measurable: the scaled run kills *exactly* the same mutants — 450
+nothing measurable: the scaled run kills *exactly* the same mutants, 450
 killed, 14 timed out, 60 survived, byte for byte the same score. Mutation
 testing asks whether a test fails, not how many random cases it tried, and each
 case here already sweeps every truncation index of an entire document.
@@ -233,20 +233,20 @@ Publishing a score without saying what it missed is most of the way back to a
 coverage badge, so: the first run scored **78.01%**, and reading the survivors
 found two genuinely different problems.
 
-About half were real gaps — the `complete` flag was barely asserted anywhere, so
+About half were real gaps, the `complete` flag was barely asserted anywhere, so
 mutations that made it permanently optimistic went unnoticed. That produced the
 invariant pinning `complete` at *every* truncation index. Another was a bound in
 the `\uXXXX` validator: no test passed a literal `A` as a hex digit, so
-`> 'A'` instead of `>= 'A'` survived — a bug that mangles exactly one code
+`> 'A'` instead of `>= 'A'` survived, a bug that mangles exactly one code
 point, `©`, and nothing else.
 
-The rest were **equivalent mutants** — changes that cannot alter behaviour, so no
+The rest were **equivalent mutants**, changes that cannot alter behaviour, so no
 test can ever kill them. Most come from one pattern: `src[p]` is `undefined` past
 the end of the string, and every comparison against `undefined` is false, so
 `p < n && src[p] === '.'` behaves identically to `p <= n && src[p] === '.'`. The
 bounds check is redundant to the *machine* and load-bearing for the *reader*, so
 it stays, and those mutants stay alive. Where redundancy was real rather than
-explanatory — a duplicated escape branch, a dead length check — it was deleted
+explanatory, a duplicated escape branch, a dead length check, it was deleted
 instead, which is why the mutant count fell from 573 to 524 while the code got
 shorter.
 
@@ -271,7 +271,7 @@ parsePartial('{"__proto__": {"polluted": true}}');
 
 `parsePartial` is a single-pass O(n) scan with no allocation beyond the result.
 It is designed to be re-run on the whole buffer after each chunk, which makes a
-full stream O(n²) in total — for LLM output measured in kilobytes, that is
+full stream O(n²) in total, for LLM output measured in kilobytes, that is
 microseconds and not worth optimizing. If you are streaming megabytes, parse on
 a debounce (say every 50 ms) rather than every token.
 

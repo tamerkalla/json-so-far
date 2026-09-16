@@ -3,7 +3,7 @@ import { parsePartial, parsePartialResult, parseSettled } from '../src/index.js'
 
 /**
  * These tables are the specification. Every row is a decision about what to
- * emit for a half-arrived token — the exact set of choices that existing
+ * emit for a half-arrived token, the exact set of choices that existing
  * partial-JSON libraries make differently from one another. If a row changes,
  * that is a breaking change, not a bug fix.
  */
@@ -187,8 +187,8 @@ describe('never throws', () => {
     '['.repeat(2000),
     '{"a": "\\',
     '\u0000\u0001\u0002',
-    '{"a": "x", , , }',
-    '[,,,]',
+    '{"a": "x",, }',
+    '[,,]',
     '{"a" "b"}',
     '{"__proto__": {"polluted": true}}',
     '"\\uZZZZ"',
@@ -296,7 +296,7 @@ describe('streaming: false (salvage a truncated final buffer)', () => {
 describe('unicode escape validation', () => {
   it('accepts the first and last character of every hex range', () => {
     // `0`,`9`,`a`,`f`,`A`,`F` are the exact endpoints of the three valid
-    // ranges. An off-by-one at an endpoint rejects a single real code point —
+    // ranges. An off-by-one at an endpoint rejects a single real code point 
     // a bound of `> 'A'` instead of `>= 'A'` breaks `©` and nothing else,
     // which is exactly the bug no hand-picked example catches.
     expect(parsePartial('["\\u0A0F\\u9a9f\\u00A9"]')).toEqual([
@@ -452,7 +452,7 @@ describe('the streaming use case, end to end', () => {
 });
 
 /**
- * Settledness — which individual paths have stopped changing.
+ * Settledness, which individual paths have stopped changing.
  *
  * As with the emission table above, these rows are the specification. A path is
  * settled when the token holding it was closed by its own syntax, so changing a
@@ -495,7 +495,7 @@ describe('settled paths', () => {
 
   describe('a literal settles as soon as it is unambiguous', () => {
     // No JSON literal is a prefix of another, so the value is known before the
-    // token finishes — but the token must still complete to settle.
+    // token finishes, but the token must still complete to settle.
     const cases: Array<[string, string[]]> = [
       ['[tru', []],
       ['[true', ['/0']],
@@ -648,7 +648,7 @@ describe('settled paths', () => {
 
   describe('path segments', () => {
     // Indices may arrive as numbers or as canonical decimal strings. Anything
-    // else names nothing — notably `length`, which is a real own property of an
+    // else names nothing, notably `length`, which is a real own property of an
     // array and would resolve if indices were looked up like object keys.
     const eleven = parseSettled('[0,1,2,3,4,5,6,7,8,9,10]');
 
@@ -695,7 +695,7 @@ describe('settled paths', () => {
     });
 
     it('reports nothing settled when no value parsed', () => {
-      // Absence is not finality: with no value, no path is settled — including
+      // Absence is not finality: with no value, no path is settled, including
       // paths that were never there to begin with.
       for (const text of ['', 'not json', '-']) {
         const r = parseSettled(text);

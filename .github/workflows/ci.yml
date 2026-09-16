@@ -40,7 +40,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Exercises the built artifacts, which the unit tests never touch —
+      # Exercises the built artifacts, which the unit tests never touch 
       # they run against src/.
       - name: Verify both published entry points load and behave
         run: node scripts/smoke.mjs

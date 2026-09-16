@@ -1,8 +1,8 @@
 # Verifying json-so-far
 
-This reproduces the README's headline claim — a truncated JSON buffer parses to
+This reproduces the README's headline claim, a truncated JSON buffer parses to
 a truthful prefix of the finished value, and per-field settledness is tracked
-separately from what is merely emitted — from the published package, in a
+separately from what is merely emitted, from the published package, in a
 clean directory. It does not require this repository to be checked out.
 
 ```bash

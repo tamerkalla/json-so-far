@@ -21,7 +21,7 @@ import { parsePartial, parsePartialResult, parseSettled } from '../src/index.js'
  *
  * Scaling down costs less than it looks like. Mutation testing asks whether a
  * test *fails*, not how many random cases it tried, and each fast-check case
- * here already sweeps every truncation index of a whole document — so one case
+ * here already sweeps every truncation index of a whole document, so one case
  * is dozens of assertions. The floor keeps any property from degenerating into
  * a handful of samples.
  */
@@ -64,7 +64,7 @@ const orderedJson = fc.letrec<{
  *
  * - `undefined` is a prefix of anything (we have not committed to a value).
  * - A string may be a character prefix of the final string.
- * - Everything else must match exactly — in particular numbers, which under the
+ * - Everything else must match exactly, in particular numbers, which under the
  *   default options are all-or-nothing.
  * - An array may be short, and only its last element may itself be partial.
  * - An object may be missing trailing keys, but the keys it has must be the
@@ -112,7 +112,7 @@ const OPTION_MATRIX = [
   { streaming: false },
 ] as const;
 
-describe('invariant 1 — never throws', () => {
+describe('invariant 1, never throws', () => {
   it('for every truncation of any JSON document, under every option set', () => {
     fc.assert(
       fc.property(orderedJson, (value) => {
@@ -159,7 +159,7 @@ describe('invariant 1 — never throws', () => {
   });
 });
 
-describe('invariant 2 — output is always a truthful prefix', () => {
+describe('invariant 2, output is always a truthful prefix', () => {
   it('every truncation yields a prefix of the completed value', () => {
     fc.assert(
       fc.property(orderedJson, (value) => {
@@ -191,7 +191,7 @@ describe('invariant 2 — output is always a truthful prefix', () => {
   });
 });
 
-describe('invariant 3 — the last index reproduces JSON.parse exactly', () => {
+describe('invariant 3, the last index reproduces JSON.parse exactly', () => {
   it('for any document, with streaming disabled', () => {
     fc.assert(
       fc.property(fc.jsonValue(), (value) => {
@@ -225,10 +225,10 @@ describe('invariant 3 — the last index reproduces JSON.parse exactly', () => {
   });
 });
 
-describe('invariant 3b — `complete` is exact, never merely optimistic', () => {
+describe('invariant 3b, `complete` is exact, never merely optimistic', () => {
   it('is true at the final index and false at every earlier one', () => {
     // For a document rooted in `{` or `[`, the closing bracket is the only
-    // thing that can finish it — so completeness is decidable, and this pins it
+    // thing that can finish it, so completeness is decidable, and this pins it
     // down at every single index rather than spot-checking a few.
     fc.assert(
       fc.property(
@@ -266,7 +266,7 @@ describe('invariant 3b — `complete` is exact, never merely optimistic', () => 
   });
 });
 
-describe('invariant 4 — output only ever grows', () => {
+describe('invariant 4, output only ever grows', () => {
   it('a longer prefix of the input yields a prefix-compatible superset', () => {
     // This is what makes it safe to render the result directly: a UI built from
     // it never has to retract something it already showed.
@@ -285,7 +285,7 @@ describe('invariant 4 — output only ever grows', () => {
   });
 });
 
-describe('invariant 5 — chunk boundaries are irrelevant', () => {
+describe('invariant 5, chunk boundaries are irrelevant', () => {
   it('feeding the same bytes in different chunk sizes gives the same answer', () => {
     fc.assert(
       fc.property(orderedJson, fc.integer({ min: 1, max: 7 }), (value, size) => {
@@ -334,7 +334,7 @@ describe('prototype safety, generatively', () => {
 /**
  * Settledness invariants.
  *
- * Settledness is the claim a caller acts on — commits a field, dispatches a
+ * Settledness is the claim a caller acts on, commits a field, dispatches a
  * request, marks a step done. A false positive is not a rendering glitch, it is
  * acting on a value that then changes. So it is checked the same way as the
  * parser itself: at every truncation index of generated documents.
@@ -353,7 +353,7 @@ function getByPointer(root: unknown, pointer: string): unknown {
   return current;
 }
 
-describe('invariant 6 — a settled path already holds its final value', () => {
+describe('invariant 6, a settled path already holds its final value', () => {
   it('every settled path equals that path in the completed document', () => {
     fc.assert(
       fc.property(orderedJson, (value) => {
@@ -374,10 +374,10 @@ describe('invariant 6 — a settled path already holds its final value', () => {
   });
 });
 
-describe('invariant 7 — settled paths only accumulate', () => {
+describe('invariant 7, settled paths only accumulate', () => {
   it('the settled set at each index is a subset of the next', () => {
     // `JSON.stringify` cannot emit a duplicate key, so the one documented
-    // exception — a later duplicate rebinding an already-settled path — cannot
+    // exception, a later duplicate rebinding an already-settled path, cannot
     // arise from generated documents.
     fc.assert(
       fc.property(orderedJson, (value) => {
@@ -397,7 +397,7 @@ describe('invariant 7 — settled paths only accumulate', () => {
   });
 });
 
-describe('invariant 8 — the root agrees with `complete`', () => {
+describe('invariant 8, the root agrees with `complete`', () => {
   it('isSettled() equals complete at every index, under every option set', () => {
     fc.assert(
       fc.property(
@@ -422,7 +422,7 @@ describe('invariant 8 — the root agrees with `complete`', () => {
   });
 });
 
-describe('invariant 9 — a finished document settles completely', () => {
+describe('invariant 9, a finished document settles completely', () => {
   it('every path in a fully parsed document is settled', () => {
     fc.assert(
       fc.property(
@@ -457,11 +457,11 @@ describe('invariant 9 — a finished document settles completely', () => {
   });
 });
 
-describe('invariant 10 — emitted and settled are independent', () => {
+describe('invariant 10, emitted and settled are independent', () => {
   it('toggling partialNumbers never changes the settled set', () => {
     // partialNumbers decides whether a half-arrived number is *emitted*. The
     // path it would occupy is on the unsettled spine either way, so it can
-    // never be settled — and no other path is affected.
+    // never be settled, and no other path is affected.
     fc.assert(
       fc.property(orderedJson, (value) => {
         const text = JSON.stringify(value);

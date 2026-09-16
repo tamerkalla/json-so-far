@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
 
 // `[1, 2]` is closed by its own `]`, so both elements are final. `"hel` is
-// still open, so it comes back as the prefix received so far — and is the one
+// still open, so it comes back as the prefix received so far, and is the one
 // path that has not settled.
 const INPUT = '{"a": [1, 2], "b": "hel';
 const EXPECTED_VALUE = '{"a":[1,2],"b":"hel"}';

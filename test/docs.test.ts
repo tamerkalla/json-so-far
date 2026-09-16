@@ -111,7 +111,7 @@ describe("every code example in VERIFY.md is executed and its output matches", (
         // The doc installs from the registry; the test instead unpacks the
         // tarball this repository just built into node_modules, reproducing
         // the installed layout without `npm install` (this package has zero
-        // dependencies, so no other node_modules content is needed) — a
+        // dependencies, so no other node_modules content is needed), a
         // fresh `npm install` would need the network, and no test may reach it.
         const replacement = [
           "mkdir -p node_modules",

@@ -5,7 +5,7 @@ name: Release
 #                   later push is a verify-only no-op release-wise.
 # workflow_dispatch every real release, taking bump and auth as inputs.
 #
-# No tag trigger. This workflow creates the tag itself — a tag trigger
+# No tag trigger. This workflow creates the tag itself, a tag trigger
 # would race it and try to publish the same version twice.
 #
 # Authentication is npm Trusted Publishing (OIDC) by default. There is no

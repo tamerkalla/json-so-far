@@ -22,7 +22,7 @@ interface Step {
 interface Workflow {
   name: string;
   // YAML 1.1 (unlike the 1.2 core schema this file is parsed with) resolves a
-  // bare `on:` key as the boolean `true`, not the string "on" — a parser
+  // bare `on:` key as the boolean `true`, not the string "on", a parser
   // using that dialect would silently look up a key that isn't there. The
   // presence check below guards against exactly that class of mistake.
   on?: Record<string, unknown>;
